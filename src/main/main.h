@@ -34,6 +34,7 @@ extern EventGroupHandle_t wifi_event_group;
 
 #define MAX_CONNECT_WAIT (30000 / portTICK_PERIOD_MS)
 #define MAX_SEND_WAIT    (20000 / portTICK_PERIOD_MS)
+#define MAX_SNTP_WAIT    (10000 / portTICK_PERIOD_MS)
 
 #ifdef __cplusplus
 }
