@@ -1,5 +1,21 @@
 menu "Gapper Central configuration"
 
+    config ROUTER_WAIT
+        int "Milliseconds to wait after powering up the router"
+        default 30000
+
+    config MAX_CONNECT_WAIT
+        int "Maximum Milliseconds to wait for connection to AP"
+        default 30000
+
+    config MAX_SEND_WAIT
+        int "Maximum Milliseconds to wait for sending data files"
+        default 20000
+
+    config MAX_SNTP_WAIT
+        int "Maximum Milliseconds to wait for time synchronization"
+        default 10000
+
     menu "Wifi Configuration"
 
         config WIFI_SSID

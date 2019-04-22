@@ -22,48 +22,39 @@
 
 #include "wifi.h"
 
+static void configure_power_management(void);
+static void initialize_nvs(void);
+static void initialize_sntp(void);
+
 static void print_wakeup_reason(esp_sleep_wakeup_cause_t);
-static uint64_t determine_sleep_time(void);
 static void print_time(time_t now, const char* message);
 
-static void time_sync_notification_cb(struct timeval *tv)
+static uint64_t determine_sleep_time(void);
+
+static void hello_task(void* context)
 {
-        print_time(tv->tv_sec, "system time has been set to");
-        xEventGroupSetBits(wifi_event_group, TIME_SYNCD_BIT);
+    ESP_LOGI(TAG, "Started hello task");
+    for(int i = 0; i < 10; ++i)
+    {
+        time_t now;
+        time(&now);
+        print_time(now, "Hello world, at ");
+        SleepFor(1000);
+    }
+    SetEvent(DATA_SENT_BIT);
+    ESP_LOGI(TAG, "Deleting hello task");
+    vTaskDelete(NULL);
 }
 
 void app_main()
 {
     time_t now = 0;
-    int bits;
     uint64_t sleep_us = 30000000;           // sleep 30s by default
-    esp_sleep_wakeup_cause_t wakeup_reason;
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (   ret == ESP_ERR_NVS_NO_FREE_PAGES
-        || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
+    initialize_nvs();
+    configure_power_management();
 
-#if CONFIG_PM_ENABLE
-    // Configure dynamic frequency scaling:
-    // maximum and minimum frequencies are set in sdkconfig,
-    // automatic light sleep is enabled if tickless idle support is enabled.
-    esp_pm_config_esp32_t pm_config = {
-            .max_freq_mhz = CONFIG_DYNAMIC_MAX_CPU_FREQ_MHZ,
-            .min_freq_mhz = CONFIG_DYNAMIC_MIN_CPU_FREQ_MHZ,
-#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
-            .light_sleep_enable = true
-#endif
-    };
-    ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
-#endif // CONFIG_PM_ENABLE
-
-    wakeup_reason = esp_sleep_get_wakeup_cause();
     print_wakeup_reason(wakeup_reason);
 
     setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/2", 1);
@@ -71,46 +62,36 @@ void app_main()
 
     wifi_start();
 
-    do
-    {
-        bits = xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT, false, true, MAX_CONNECT_WAIT);
-        if ((bits & CONNECTED_BIT) != CONNECTED_BIT)
+    BEGIN_WAIT_SEQUENCE
+
+        WAIT_AND_BAIL(CONNECTED_BIT, CONFIG_MAX_CONNECT_WAIT, "Timed out waiting for connection")
+
+        initialize_sntp();
+
+        if (!WaitFor(TIME_SYNCD_BIT, CONFIG_MAX_SNTP_WAIT))
         {
-            ESP_LOGE(TAG, "Timed out waiting for connection");
-            break;
-        }
+            struct tm timeinfo;
 
-        time(&now);
-        print_time(now, "time before sync is");
-
-        ESP_LOGI(TAG, "Initializing SNTP");
-        sntp_setoperatingmode(SNTP_OPMODE_POLL);
-        sntp_setservername(0, "pool.ntp.org");
-        sntp_set_time_sync_notification_cb(time_sync_notification_cb);
-#ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
-        sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
-#endif
-        sntp_init();
-        
-
-        bits = xEventGroupWaitBits(wifi_event_group, TIME_SYNCD_BIT, false, true, MAX_SNTP_WAIT);
-        if ((bits & TIME_SYNCD_BIT) != TIME_SYNCD_BIT)
-        {
-            // if (timeinfo.tm_year < (2016 - 1900))
-            // {
-            //     ESP_LOGE(TAG, "Timed out waiting for obtaining valid time");
-            //     break;
-            // }
+            time(&now);
+            gmtime_r(&now, &timeinfo);
+            if (timeinfo.tm_year < (2016 - 1900))
+            {
+                ESP_LOGE(TAG, "Timed out waiting for obtaining valid time");
+                break;
+            }
             ESP_LOGI(TAG, "Continuing using RTC time");
-            xEventGroupSetBits(wifi_event_group, TIME_SYNCD_BIT);
+            SetEvent(TIME_SYNCD_BIT);
         }
 
-        time(&now);
-        print_time(now, "time after sync is");
+        // do something
+        xTaskCreate(hello_task, "hello_task", 3184, NULL, 5, NULL);
+
+        // wait until all is done
+        WAIT_AND_BAIL(DATA_SENT_BIT, CONFIG_MAX_SEND_WAIT, "Timed out waiting to send data")
 
         sleep_us = determine_sleep_time();
 
-    } while(false);
+    END_WAIT_SEQUENCE
 
     // shut down
 
@@ -158,3 +139,49 @@ static void print_wakeup_reason(esp_sleep_wakeup_cause_t wakeup_reason)
     ESP_LOGI(TAG, "%s", reason);
 }
 
+static void initialize_nvs(void)
+{
+    // Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (   ret == ESP_ERR_NVS_NO_FREE_PAGES
+        || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+}
+
+static void configure_power_management(void)
+{
+#if CONFIG_PM_ENABLE
+    // Configure dynamic frequency scaling:
+    // maximum and minimum frequencies are set in sdkconfig,
+    // automatic light sleep is enabled if tickless idle support is enabled.
+    esp_pm_config_esp32_t pm_config = {
+            .max_freq_mhz = CONFIG_DYNAMIC_MAX_CPU_FREQ_MHZ,
+            .min_freq_mhz = CONFIG_DYNAMIC_MIN_CPU_FREQ_MHZ,
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+            .light_sleep_enable = true
+#endif
+    };
+    ESP_ERROR_CHECK( esp_pm_configure(&pm_config) );
+#endif // CONFIG_PM_ENABLE
+}
+
+static void time_sync_notification_cb(struct timeval *tv)
+{
+    print_time(tv->tv_sec, "system time has been set to");
+    xEventGroupSetBits(wifi_event_group, TIME_SYNCD_BIT);
+}
+
+static void initialize_sntp(void)
+{
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+#ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
+    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+#endif
+    sntp_init();
+}

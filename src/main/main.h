@@ -32,9 +32,20 @@ extern EventGroupHandle_t wifi_event_group;
 #define DATA_SENT_BIT  BIT2
 #define PHOTO_SENT_BIT BIT3
 
-#define MAX_CONNECT_WAIT (30000 / portTICK_PERIOD_MS)
-#define MAX_SEND_WAIT    (20000 / portTICK_PERIOD_MS)
-#define MAX_SNTP_WAIT    (10000 / portTICK_PERIOD_MS)
+inline bool WaitFor(const EventBits_t mask, uint32_t timeoutMs)
+{
+    int bits = xEventGroupWaitBits(wifi_event_group, mask, false, true, timeoutMs / portTICK_PERIOD_MS);
+    return ((bits & mask) == mask);
+}
+
+inline void SetEvent(const EventBits_t mask)
+{
+    xEventGroupSetBits(wifi_event_group, mask);
+}
+
+#define BEGIN_WAIT_SEQUENCE do {
+#define WAIT_AND_BAIL(mask, timeoutMs, message) if (!WaitFor(mask, timeoutMs)) { ESP_LOGI(TAG, message); break; }
+#define END_WAIT_SEQUENCE } while(false);
 
 #ifdef __cplusplus
 }
