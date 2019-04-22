@@ -12,7 +12,6 @@
 
 #include "esp_system.h"
 #include "esp_pm.h"
-#include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_sleep.h"
 #include "driver/uart.h"
@@ -20,7 +19,9 @@
 #include "lwip/err.h"
 #include "lwip/apps/sntp.h"
 
+#include "board.h"
 #include "wifi.h"
+#include "measure_task.h"
 
 static void configure_power_management(void);
 static void initialize_nvs(void);
@@ -30,6 +31,8 @@ static void print_wakeup_reason(esp_sleep_wakeup_cause_t);
 static void print_time(time_t now, const char* message);
 
 static uint64_t determine_sleep_time(void);
+
+CURL* s_curl = 0;
 
 static void hello_task(void* context)
 {
@@ -60,11 +63,26 @@ void app_main()
     setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/2", 1);
     tzset();
 
+    setup_board();
+    switch_router(1);
+
+    xTaskCreate(&measure_task, "measure_task", 8192, NULL, 5, NULL);
+
+    SleepFor(CONFIG_ROUTER_WAIT);
+
     wifi_start();
 
     BEGIN_WAIT_SEQUENCE
 
         WAIT_AND_BAIL(CONNECTED_BIT, CONFIG_MAX_CONNECT_WAIT, "Timed out waiting for connection")
+
+        curl_global_init(CURL_GLOBAL_NOTHING);
+        s_curl = curl_easy_init();
+        if (s_curl == NULL)
+        {
+            ESP_LOGE(TAG, "CURL initialization failed");
+            break;
+        }
 
         initialize_sntp();
 
@@ -95,9 +113,18 @@ void app_main()
 
     // shut down
 
+    if (s_curl != NULL)
+    {
+        curl_easy_cleanup(s_curl);
+        s_curl = NULL;
+    }
+    curl_global_cleanup();
+
     // esp_bluedroid_disable();
     // esp_bt_controller_disable();
     wifi_stop();
+
+    switch_router(0);
 
     time(&now);
     print_time(now +(sleep_us / 1000000), "next wakeup at");

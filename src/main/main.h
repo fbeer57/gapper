@@ -14,6 +14,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "curl/curl.h"
+#include "sdkconfig.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,6 +48,8 @@ inline void SetEvent(const EventBits_t mask)
 #define BEGIN_WAIT_SEQUENCE do {
 #define WAIT_AND_BAIL(mask, timeoutMs, message) if (!WaitFor(mask, timeoutMs)) { ESP_LOGI(TAG, message); break; }
 #define END_WAIT_SEQUENCE } while(false);
+
+extern CURL* s_curl;
 
 #ifdef __cplusplus
 }
