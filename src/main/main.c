@@ -60,13 +60,15 @@ void app_main()
 
     print_wakeup_reason(wakeup_reason);
 
+    wifi_event_group = xEventGroupCreate();
+
     setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/2", 1);
     tzset();
 
     setup_board();
     switch_router(1);
 
-    xTaskCreate(&measure_task, "measure_task", 8192, NULL, 5, NULL);
+    xTaskCreate(&measure_task, "measure_task", 16384, NULL, 5, NULL);
 
     SleepFor(CONFIG_ROUTER_WAIT);
 
@@ -101,9 +103,6 @@ void app_main()
             SetEvent(TIME_SYNCD_BIT);
         }
 
-        // do something
-        xTaskCreate(hello_task, "hello_task", 3184, NULL, 5, NULL);
-
         // wait until all is done
         WAIT_AND_BAIL(DATA_SENT_BIT, CONFIG_MAX_SEND_WAIT, "Timed out waiting to send data")
 
@@ -127,7 +126,7 @@ void app_main()
     switch_router(0);
 
     time(&now);
-    print_time(now +(sleep_us / 1000000), "next wakeup at");
+    print_time(now + (sleep_us / 1000000), "next wakeup at");
 
     esp_sleep_enable_timer_wakeup(sleep_us);
     esp_deep_sleep_start();
@@ -135,7 +134,7 @@ void app_main()
 
 static uint64_t determine_sleep_time()
 {
-    return 15 * 1000000;
+    return 3600000000;   // 1 hour
 }
 
 static void print_time(time_t now, const char* message)

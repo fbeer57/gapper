@@ -70,7 +70,6 @@ static void event_handler(
 void wifi_start(void)
 {
     s_reconnect = true;
-    wifi_event_group = xEventGroupCreate();
 
     tcpip_adapter_init();
     ESP_ERROR_CHECK(esp_event_loop_create_default());
