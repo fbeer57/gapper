@@ -1,6 +1,10 @@
 menu "Gapper Central configuration"
 
-    menu "Timeouts"
+    menu "Times"
+      config SLEEP_INTERVAL
+          int "Seconds to spend in deep sleep"
+          default 3600
+
       config ROUTER_WAIT
           int "Milliseconds to wait after powering up the router"
           default 30000

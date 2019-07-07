@@ -60,6 +60,12 @@ void upload_file(const char* type, const uint8_t* data, size_t length, const cha
     strftime(ftp_filename, sizeof(ftp_filename), "%Y%m%d%H%M%S", &timeinfo);
     snprintf(ftp_url, sizeof(ftp_url), "%s/%s/%s/%s.%s", CONFIG_FTP_BASE_URL, type, ftp_dirname, ftp_filename, suffix);
 
+    if (strlen(CONFIG_FTP_BASE_URL) == 0)
+    {
+        ESP_LOGI(TAG, "Simulate FTP upload to ~%s.", ftp_url);
+        return;
+    }
+
     upload.readptr = data;
     upload.sizeleft = length;
 

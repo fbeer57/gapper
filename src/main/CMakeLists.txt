@@ -1,4 +1,2 @@
-set(COMPONENT_SRCS "board.c" "main.c" "measure_task.c" "upload.c" "wifi.c")
-set(COMPONENT_ADD_INCLUDEDIRS ".")
-
-register_component()
+idf_component_register(SRCS "ble_scan.c" "board.c" "main.c" "measure_task.c" "upload.c" "wifi.c"
+                       INCLUDE_DIRS ".")

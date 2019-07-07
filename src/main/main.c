@@ -20,6 +20,7 @@
 #include "lwip/apps/sntp.h"
 
 #include "board.h"
+#include "ble_scan.h"
 #include "wifi.h"
 #include "measure_task.h"
 
@@ -28,113 +29,125 @@ static void initialize_nvs(void);
 static void initialize_sntp(void);
 
 static void print_wakeup_reason(esp_sleep_wakeup_cause_t);
-static void print_time(time_t now, const char* message);
 
-static uint64_t determine_sleep_time(void);
+static void print_time(time_t now, const char* message);
+static void set_base_time(int year, int month, int day, int hour, int minute, int second);
+static uint64_t determine_sleep_time(time_t now);
 
 CURL* s_curl = 0;
-
-static void hello_task(void* context)
-{
-    ESP_LOGI(TAG, "Started hello task");
-    for(int i = 0; i < 10; ++i)
-    {
-        time_t now;
-        time(&now);
-        print_time(now, "Hello world, at ");
-        SleepFor(1000);
-    }
-    SetEvent(DATA_SENT_BIT);
-    ESP_LOGI(TAG, "Deleting hello task");
-    vTaskDelete(NULL);
-}
+static time_t base_time;
 
 void app_main()
 {
     time_t now = 0;
-    uint64_t sleep_us = 30000000;           // sleep 30s by default
+    uint64_t sleep_us;
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
-    initialize_nvs();
-    configure_power_management();
-
-    print_wakeup_reason(wakeup_reason);
-
-    wifi_event_group = xEventGroupCreate();
-
-    setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/2", 1);
-    tzset();
-
+    set_base_time(2019, 6, 10, 9, 36, 27);
     setup_board();
-    switch_router(1);
 
-    xTaskCreate(&measure_task, "measure_task", 16384, NULL, 5, NULL);
+    uint32_t battery_milliVolts = get_battery_millivolts();
+    if (battery_milliVolts > 11700)
+    {
+        initialize_nvs();
+        configure_power_management();
 
-    SleepFor(CONFIG_ROUTER_WAIT);
+        print_wakeup_reason(wakeup_reason);
 
-    wifi_start();
+        wifi_event_group = xEventGroupCreate();
 
-    BEGIN_WAIT_SEQUENCE
+        setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/2", 1);
+        tzset();
 
-        WAIT_AND_BAIL(CONNECTED_BIT, CONFIG_MAX_CONNECT_WAIT, "Timed out waiting for connection")
+        switch_router(1);
 
-        curl_global_init(CURL_GLOBAL_NOTHING);
-        s_curl = curl_easy_init();
-        if (s_curl == NULL)
-        {
-            ESP_LOGE(TAG, "CURL initialization failed");
-            break;
-        }
+        xTaskCreate(&measure_task, "measure_task", 16384, NULL, 5, NULL);
+        
+        ble_start();
+        SleepFor(CONFIG_ROUTER_WAIT);
+        ble_stop();
 
-        initialize_sntp();
+        wifi_start();
 
-        if (!WaitFor(TIME_SYNCD_BIT, CONFIG_MAX_SNTP_WAIT))
-        {
-            struct tm timeinfo;
+        BEGIN_WAIT_SEQUENCE
 
-            time(&now);
-            gmtime_r(&now, &timeinfo);
-            if (timeinfo.tm_year < (2016 - 1900))
+            WAIT_AND_BAIL(CONNECTED_BIT, CONFIG_MAX_CONNECT_WAIT, "Timed out waiting for connection")
+
+            curl_global_init(CURL_GLOBAL_NOTHING);
+            s_curl = curl_easy_init();
+            if (s_curl == NULL)
             {
-                ESP_LOGE(TAG, "Timed out waiting for obtaining valid time");
+                ESP_LOGE(TAG, "CURL initialization failed");
                 break;
             }
-            ESP_LOGI(TAG, "Continuing using RTC time");
-            SetEvent(TIME_SYNCD_BIT);
+
+            initialize_sntp();
+
+            if (!WaitFor(TIME_SYNCD_BIT, CONFIG_MAX_SNTP_WAIT))
+            {
+                struct tm timeinfo;
+
+                time(&now);
+                gmtime_r(&now, &timeinfo);
+                if (timeinfo.tm_year < (2019 - 1900))
+                {
+                    ESP_LOGE(TAG, "Timed out waiting for obtaining valid time");
+                    break;
+                }
+                ESP_LOGI(TAG, "Continuing using RTC time");
+                SetEvent(TIME_SYNCD_BIT);
+            }
+
+            // wait until all is done
+            WAIT_AND_BAIL(DATA_SENT_BIT, CONFIG_MAX_SEND_WAIT, "Timed out waiting to send data")
+
+        END_WAIT_SEQUENCE
+
+        // shut down
+
+        if (s_curl != NULL)
+        {
+            curl_easy_cleanup(s_curl);
+            s_curl = NULL;
         }
+        curl_global_cleanup();
 
-        // wait until all is done
-        WAIT_AND_BAIL(DATA_SENT_BIT, CONFIG_MAX_SEND_WAIT, "Timed out waiting to send data")
+        wifi_stop();
 
-        sleep_us = determine_sleep_time();
-
-    END_WAIT_SEQUENCE
-
-    // shut down
-
-    if (s_curl != NULL)
-    {
-        curl_easy_cleanup(s_curl);
-        s_curl = NULL;
+        switch_router(0);
     }
-    curl_global_cleanup();
-
-    // esp_bluedroid_disable();
-    // esp_bt_controller_disable();
-    wifi_stop();
-
-    switch_router(0);
 
     time(&now);
+    sleep_us = determine_sleep_time(now);
+
     print_time(now + (sleep_us / 1000000), "next wakeup at");
+    // ESP_LOGI(TAG, "Sleeping for %llu uSec", sleep_us);
 
     esp_sleep_enable_timer_wakeup(sleep_us);
     esp_deep_sleep_start();
 }
 
-static uint64_t determine_sleep_time()
+static uint64_t determine_sleep_time(time_t now)
 {
-    return 3600000000;   // 1 hour
+    uint64_t usec = CONFIG_SLEEP_INTERVAL;
+    if (now >= base_time)
+    {
+        usec = base_time - now + ((now - base_time) / CONFIG_SLEEP_INTERVAL + 1) * CONFIG_SLEEP_INTERVAL; 
+    }
+    return usec * 1000000L;
+}
+
+static void set_base_time(int year, int month, int day, int hour, int minute, int second)
+{
+    struct tm base = {
+        .tm_year = year - 1900,
+        .tm_mon = month - 1,
+        .tm_mday = day,
+        .tm_hour = hour,
+        .tm_min = minute,
+        .tm_sec = second
+    };
+    base_time = mktime(&base);
 }
 
 static void print_time(time_t now, const char* message)

@@ -8,6 +8,8 @@ set(EXTRA_COMPONENT_DIRS
 
 set(COMPONENTS
   main
+  bt
+  bluedroid
   curl
   esp_adc_cal
   nvs_flash
