@@ -10,8 +10,8 @@ set(COMPONENTS
   main
   bt
   bluedroid
-  curl
   esp_adc_cal
+  esp_http_client
   nvs_flash
   bootloader
   esptool_py

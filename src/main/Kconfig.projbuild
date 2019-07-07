@@ -22,13 +22,17 @@ menu "Gapper Central configuration"
           default 10000
     endmenu
 
-    menu "FTP Configuration"
+    menu "Upload Configuration"
 
-        config FTP_USERPASSWORD
-            string "FTP user name and password"
+        config UPLOAD_USER
+            string "Upload user name"
 
-        config FTP_BASE_URL
-            string "FTP base url"
+        config UPLOAD_PASSWORD
+            string "Upload user's password"
+
+        config UPLOAD_BASE_URL
+            string "Upload base url"
+            default "http://www.blaubeer.eu/garden-test"
 
     endmenu 
 

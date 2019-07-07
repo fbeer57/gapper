@@ -34,7 +34,6 @@ static void print_time(time_t now, const char* message);
 static void set_base_time(int year, int month, int day, int hour, int minute, int second);
 static uint64_t determine_sleep_time(time_t now);
 
-CURL* s_curl = 0;
 static time_t base_time;
 
 void app_main()
@@ -73,14 +72,6 @@ void app_main()
 
             WAIT_AND_BAIL(CONNECTED_BIT, CONFIG_MAX_CONNECT_WAIT, "Timed out waiting for connection")
 
-            curl_global_init(CURL_GLOBAL_NOTHING);
-            s_curl = curl_easy_init();
-            if (s_curl == NULL)
-            {
-                ESP_LOGE(TAG, "CURL initialization failed");
-                break;
-            }
-
             initialize_sntp();
 
             if (!WaitFor(TIME_SYNCD_BIT, CONFIG_MAX_SNTP_WAIT))
@@ -104,13 +95,6 @@ void app_main()
         END_WAIT_SEQUENCE
 
         // shut down
-
-        if (s_curl != NULL)
-        {
-            curl_easy_cleanup(s_curl);
-            s_curl = NULL;
-        }
-        curl_global_cleanup();
 
         wifi_stop();
 
