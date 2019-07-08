@@ -149,5 +149,6 @@ void ble_stop()
 {
     esp_bluedroid_disable();
     esp_bt_controller_disable();
-    SleepFor(250);
+    esp_bt_controller_deinit();
+    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BTDM));
 }

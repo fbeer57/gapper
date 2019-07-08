@@ -60,7 +60,7 @@ void app_main()
 
         switch_router(1);
 
-        xTaskCreate(&measure_task, "measure_task", 16384, NULL, 5, NULL);
+        xTaskCreate(&measure_task, "measure_task", 4096, NULL, 5, NULL);
         
         ble_start();
         SleepFor(CONFIG_ROUTER_WAIT);
@@ -105,7 +105,6 @@ void app_main()
     sleep_us = determine_sleep_time(now);
 
     print_time(now + (sleep_us / 1000000), "next wakeup at");
-    // ESP_LOGI(TAG, "Sleeping for %llu uSec", sleep_us);
 
     esp_sleep_enable_timer_wakeup(sleep_us);
     esp_deep_sleep_start();
