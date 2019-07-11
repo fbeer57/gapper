@@ -30,9 +30,17 @@ menu "Gapper Central configuration"
         config UPLOAD_PASSWORD
             string "Upload user's password"
 
-        config UPLOAD_BASE_URL
-            string "Upload base url"
-            default "http://www.blaubeer.eu/garden-test"
+        config UPLOAD_HOST
+            string "Upload server"
+            default "www.blaubeer.eu"
+
+        config UPLOAD_PATH
+            string "Upload server path"
+            default "/garden-test/raw-upload.php"
+
+        config UPLOAD_PORT
+            int "Upload server port"
+            default 80
 
     endmenu 
 

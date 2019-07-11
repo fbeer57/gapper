@@ -21,13 +21,13 @@ static esp_ble_scan_params_t ble_scan_params = {
     .scan_filter_policy     = BLE_SCAN_FILTER_ALLOW_ALL,
     .scan_interval          = 0x50,
     .scan_window            = 0x30,
-    .scan_duplicate         = BLE_SCAN_DUPLICATE_DISABLE
+    .scan_duplicate         = BLE_SCAN_DUPLICATE_ENABLE
 };
+
+head_t gapper_scan_results = SLIST_HEAD_INITIALIZER(gapper_scan_results);
 
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
-    uint8_t *adv_name = NULL;
-    uint8_t adv_name_len = 0;
     switch (event) {
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
         //the unit of the duration is second
@@ -47,30 +47,14 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
         esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
         switch (scan_result->scan_rst.search_evt) {
-        case ESP_GAP_SEARCH_INQ_RES_EVT:
-            esp_log_buffer_hex(TAG, scan_result->scan_rst.bda, 6);
-            ESP_LOGI(TAG, "searched Adv Data Len %d, Scan Response Len %d", scan_result->scan_rst.adv_data_len, scan_result->scan_rst.scan_rsp_len);
-            adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv,
-                                                ESP_BLE_AD_TYPE_NAME_CMPL, &adv_name_len);
-            ESP_LOGI(TAG, "searched Device Name Len %d", adv_name_len);
-            esp_log_buffer_char(TAG, adv_name, adv_name_len);
-
-#if CONFIG_EXAMPLE_DUMP_ADV_DATA_AND_SCAN_RESP
-            if (scan_result->scan_rst.adv_data_len > 0) {
-                ESP_LOGI(TAG, "adv data:");
-                esp_log_buffer_hex(TAG, &scan_result->scan_rst.ble_adv[0], scan_result->scan_rst.adv_data_len);
-            }
-            if (scan_result->scan_rst.scan_rsp_len > 0) {
-                ESP_LOGI(TAG, "scan resp:");
-                esp_log_buffer_hex(TAG, &scan_result->scan_rst.ble_adv[scan_result->scan_rst.adv_data_len], scan_result->scan_rst.scan_rsp_len);
-            }
-#endif
-            ESP_LOGI(TAG, "\n");
-
-            if (adv_name != NULL) {
-                // connect ...
-            }
+        case ESP_GAP_SEARCH_INQ_RES_EVT: {
+            gapper_scan_result_t* result = (gapper_scan_result_t*)malloc(sizeof(gapper_scan_result_t));
+            memcpy(result->bda, scan_result->scan_rst.bda, sizeof(esp_bd_addr_t));
+            memcpy(&result->info, scan_result->scan_rst.ble_adv, sizeof(beacon_info_t));
+            SLIST_INSERT_HEAD(&gapper_scan_results, result, nodes);
+            ESP_LOGI(TAG, "scan result added");
             break;
+        }
         case ESP_GAP_SEARCH_INQ_CMPL_EVT:
             break;
         default:
@@ -85,16 +69,6 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             break;
         }
         ESP_LOGI(TAG, "stop scan successfully");
-        break;
-
-    case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
-        if (param->adv_stop_cmpl.status != ESP_BT_STATUS_SUCCESS){
-            ESP_LOGE(TAG, "adv stop failed, error status = %x", param->adv_stop_cmpl.status);
-            break;
-        }
-        ESP_LOGI(TAG, "stop adv successfully");
-        break;
-    case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT:
         break;
     default:
         break;
@@ -138,6 +112,8 @@ void ble_start()
         ESP_LOGE(TAG, "%s gap register failed, error code = %x\n", __func__, ret);
         return;
     }
+
+    SLIST_INIT(&gapper_scan_results);
 
     ret = esp_ble_gap_set_scan_params(&ble_scan_params);
     if (ret){
