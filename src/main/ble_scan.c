@@ -48,11 +48,18 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
         switch (scan_result->scan_rst.search_evt) {
         case ESP_GAP_SEARCH_INQ_RES_EVT: {
-            gapper_scan_result_t* result = (gapper_scan_result_t*)malloc(sizeof(gapper_scan_result_t));
-            memcpy(result->bda, scan_result->scan_rst.bda, sizeof(esp_bd_addr_t));
-            memcpy(&result->info, scan_result->scan_rst.ble_adv, sizeof(beacon_info_t));
-            SLIST_INSERT_HEAD(&gapper_scan_results, result, nodes);
-            ESP_LOGI(TAG, "scan result added");
+            uint8_t manuf_len;
+            uint8_t* manufacturer_data = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv, ESP_BLE_AD_MANUFACTURER_SPECIFIC_TYPE, &manuf_len);
+            if (   manufacturer_data[0] == 0x59 
+                && manufacturer_data[1] == 0x00 
+                && manufacturer_data[2] == 0x02
+               ) {
+                gapper_scan_result_t* result = (gapper_scan_result_t*)malloc(sizeof(gapper_scan_result_t));
+                memcpy(result->bda, scan_result->scan_rst.bda, sizeof(esp_bd_addr_t));
+                memcpy(&result->info, manufacturer_data + 3, sizeof(beacon_info_t));
+                SLIST_INSERT_HEAD(&gapper_scan_results, result, nodes);
+                ESP_LOGI(TAG, "scan result added, %d/%d", manuf_len, sizeof(beacon_info_t));
+            }
             break;
         }
         case ESP_GAP_SEARCH_INQ_CMPL_EVT:
