@@ -1,0 +1,29 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "/usr/include",
+                "/usr/local/include",
+                "${workspaceRoot}",
+                "${workspaceRoot}/src/build/config",
+                "${workspaceRoot}/../../xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/5.2.0/include",
+                "${workspaceRoot}/../../esp-idf/tools/unit-test-app/components/test_utils/include"
+            ],
+            "defines": [],
+            "intelliSenseMode": "clang-x64",
+            "compileCommands": "${workspaceRoot}/src/build/compile_commands.json",
+            "browse": {
+                "path": [
+                    "/usr/include",
+                    "/usr/local/include",
+                    "${workspaceRoot}",
+                    "${workspaceRoot}/../../esp-idf/components/"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": ""
+            }
+        }
+    ],
+    "version": 4
+}
